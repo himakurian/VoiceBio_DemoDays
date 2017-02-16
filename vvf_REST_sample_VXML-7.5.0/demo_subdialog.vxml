@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<vxml version="2.1" xmlns="http://www.w3.org/2001/vxml" xml:lang="en-US">
+
+  <!-- Default handlers for some of the more common errors that could escape from forms -->
+  <catch event="error.badfetch">
+    <return/>
+  </catch>
+  <catch event="error.recognition">
+    <goto next="#notification_of_error"/>
+  </catch>
+  <catch event="connection.disconnect.hangup">
+    <goto next="#notification_of_error"/>
+  </catch>
+
+  <!-- Allowing bargein during biometric operations can have a negative effect, so force
+       explicit enable of bargein for allowed forms -->
+  <property name="bargein" value="false"/>
+  <!-- Biometric operations require recorded utterances -->
+  <property name="recordutterance" value="true"/>
+
+  <!-- This URL is the VoiceVault REST API location, and is a primary
+       input into the Voice Verification component -->  
+  <var name="vve_api_url" expr="'https://a8i1.voicevault.net/RestApi800'"/>
+  
+  <!-- This URL is a sample service that allows mapping from account numbers
+       to VoiceVault Claimant IDs.  It is NOT a supported production system -->
+  <var name="vve_accounts_url" expr="'https://a8i1.voicevault.net/AccountService'"/>
+
+  <!-- Credentials information provided by calling form -->
+  <var name="username" />
+  <var name="password" />
+
+  <!-- Sample format is provided by calling form -->
+  <var name="format" />
+
+  <!-- State variables used in the code below, do not change -->
+  <var name="external_ref" />
+  <var name="configuration_id" />
+  <var name="organisation_unit" />
+  <var name="claimant_id"/>
+  <var name="user"/>
+  <var name="dialogue_id"/>
+
+  <!-- TODO: A convenience variable to allow easy update and rollback of prompts -->
+  <var name="prompt_path" expr="'prompts/'"/>
+
+  <!-- The maximum number of times to try to get input from a caller -->
+  <var name="max_tries" expr="3"/>
+  
+  <var name="status_code"/>
+  <var name="status_message"/>
+  <var name="process_result"/>
+  <var name="account_number_grammar"/>
+  <var name="tries"/>
+  <var name="pin"/>
+  <var name="num_prompts" expr="0"/>
+
+  <var name="demo_name" expr="'v7.5 Sample Code'"/>
+
+  <form id="entry_point">
+    <var name="vv_username" />
+    <var name="vv_password" />
+    <var name="vv_configuration_id" />
+    <var name="vv_organisation_id" />
+    <var name="vv_external_ref" />
+    <var name="vv_format" />
+    
+    <block>
+      <assign name="username" expr="vv_username" />
+      <assign name="password" expr="vv_password" />
+      <assign name="configuration_id" expr="vv_configuration_id" />
+      <assign name="organisation_unit" expr="vv_organisation_id" />
+      <assign name="external_ref" expr="vv_external_ref" />
+      <assign name="format" expr="vv_format" />
+      
+      <goto next="#obtain_account_number"/>
+    </block>
+  </form>
+
+
+  <form id="obtain_account_number">
+    <!-- This form uses an appropriate grammar to recognize an account number as 
+       spoken by the caller and then saves that account number in a variable 
+      for subsequent use in the call flow. In this sample the account number
+      is 6 digits long and only received using DTMF. 
+    -->
+    <block>
+      <assign name="tries" expr="0"/>
+    </block>
+    
+
+    <field name="account_number">
+      <property name="timeout" value="5s"/>
+      <property name="bargein" value="true"/>
+      <property name="inputmodes" value="dtmf"/>
+
+      <grammar srcexpr="'6digit_dtmf.grxml'"  type="application/srgs+xml"/>
+
+      <prompt>
+        <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'welcome_demo.wav'">
+          Welcome to the Voice Vault demonstration system.
+        </audio>
+        <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'enter_account.wav'">
+          Please enter your account number using the phone keypad
+        </audio>
+      </prompt>
+
+      <nomatch>
+        <if cond="tries &gt;= max_tries">
+          <goto next="#notification_of_error"/>
+        </if>
+
+        <assign name="tries" expr="parseInt(tries)+1"/>
+
+        <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'invalid_account.wav'">
+          That is not a valid account number.
+        </audio>
+        <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'enter_account.wav'">
+          Please enter your account number using the phone keypad
+        </audio>
+      </nomatch>
+
+      <noinput>
+        <if cond="tries &gt;= max_tries">
+          <goto next="#notification_of_error"/>
+        </if>
+
+        <assign name="tries" expr="parseInt(tries)+1"/>
+
+        <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'invalid_account.wav'">
+          That is not a valid account number.
+        </audio>
+        <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'enter_account.wav'">
+          Please enter your account number using the phone keypad
+        </audio>
+      </noinput>
+
+      <filled>
+        <assign name="user" expr="lastresult$.interpretation.number"/>
+        <goto next="#lookup_user" />
+      </filled>
+    </field>
+  </form>
+
+
+  <form id="lookup_user">
+    <!-- This form looks up the entered account number in the sample mapping
+         service.  You should replace this sample service in your own application
+         with your own account management system.   
+    -->
+    <block>
+      <data name="result" srcexpr="vve_accounts_url + '/Lookup.ashx'" namelist="username password configuration_id user"/>
+
+      <script>
+        <![CDATA[
+	        status_code = result.documentElement.getElementsByTagName("status_code").item(0).firstChild.data;
+	        if (status_code == 0)
+	        {
+            claimant_id = result.documentElement.getElementsByTagName("claimant_id").item(0).firstChild.data;
+          } else {
+            status_message = result.documentElement.getElementsByTagName("message").item(0).firstChild.data;
+	        }
+        ]]>
+      </script>
+      <if cond="status_code != 0" >
+        <goto next="#new_user"/>
+      <else/>
+        
+        <goto next="#do_biometrics" />
+      </if>
+    </block>
+  </form>
+
+
+  <form id="new_user">
+    <!-- If the account number has not previously successfully been enrolled then
+         we register a new claimant ID with the VoiceVault system for it. We do
+         not yet save that ID back to the sample account mapping system, as we
+         will only do so when enrollment has been successful.   
+    -->
+    <block>
+      <data name="result" srcexpr="vve_api_url + '/RegisterClaimant.ashx'" namelist="username password organisation_unit"/>
+
+      <script>
+        <![CDATA[
+	        status_code = result.documentElement.getElementsByTagName("status_code").item(0).firstChild.data;
+	        if (status_code == 0)
+	        {
+            claimant_id = result.documentElement.getElementsByTagName("claimant_id").item(0).firstChild.data;
+          } else {
+            status_message = result.documentElement.getElementsByTagName("message").item(0).firstChild.data;
+	        }
+        ]]>
+      </script>
+      <if cond="status_code != 0" >
+        <goto next="#notification_of_error"/>
+      <else/>
+        <goto next="#instructions" />
+      </if>
+    </block>
+  </form>
+
+
+  <form id="instructions">
+    <block>
+      <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'enrol_instruct.wav'">
+        As this is the first time you are using the system, you will now be enrolled.
+        This is a one-off process that wont take long.
+        Please respond to the following short prompts.
+      </audio>
+
+      <goto next="#do_biometrics"/>
+
+    </block>
+  </form>
+  
+  
+  <form id="do_biometrics">
+    <!-- Call through to the VoiceVault VXML subdialog.   
+    -->
+    <subdialog name="result" src="voicevault_subdialog.vxml">
+      <param name="vve_api_url" expr="vve_api_url"/>
+      <param name="vve_username" expr="username" />
+      <param name="vve_password" expr="password" />
+      <param name="vve_external_ref" expr="external_ref" />
+      <param name="vve_format" expr="format" />
+      <param name="vve_configuration_id" expr="configuration_id"/>
+      <param name="vve_claimant_id" expr="claimant_id"/>
+
+      <filled>
+        <log><value expr="result.vve_dialogue_id"/></log>
+        <log><value expr="result.vve_process_type"/></log>
+        <log><value expr="result.vve_process_result"/></log>
+        <log><value expr="result.vve_num_prompts"/></log>
+
+        <assign name="num_prompts" expr="result.vve_num_prompts"/>
+        <assign name="process_type" expr="result.vve_process_type"/>
+        <assign name="process_result" expr="result.vve_process_result"/>
+        <assign name="dialogue_id" expr="result.vve_dialogue_id"/>
+
+        <if cond="result.vve_process_result == 'Error'">
+          <goto next="#notification_of_error"/>
+        <else/>
+          <goto next="#biometric_results"/>
+        </if>
+      </filled>
+    </subdialog>
+  </form>
+
+  <form id="biometric_results">
+    <!-- Do any special processing in responding to biometric results.
+         In this case we save the previously registered claimant ID back
+         to the sample account mapping system if enrollment was successful.   
+    -->
+    <block>
+      <if cond="process_result == 'Success'">
+        <data fetchtimeout="10s" name="result" srcexpr="vve_accounts_url + '/Register.ashx'" method="post" namelist="username password configuration_id claimant_id user"/>
+      </if>
+      <goto next="#notification_of_result"/>
+    </block>
+  </form>
+
+
+  <form id="notification_of_error">
+    <!-- If somethign went wrong we so inform the user and exit this subdialog.   
+    -->
+    <block>
+      <prompt>
+        <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'error.wav'">I'm sorry I'm unable to complete your request. Please contact the helpdesk.</audio>
+      </prompt>
+      <return/>
+    </block>
+  </form>
+
+  <form id="notification_of_result">
+    <!-- Otherwise the biometric transaction completed and we inform the user
+         of the result.   
+    -->
+    <block>
+        <if cond="process_result == 'Success'">
+          <prompt>
+            <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'enrol_success.wav'">Thank you.  Enrolment is now complete.</audio>
+            <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'hang_up.wav'">You can now hang up.</audio>
+          </prompt>
+        <elseif cond="process_result == 'Accept'"/>
+          <prompt>
+            <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'verify_success.wav'">You have been successfully authenticated.</audio>
+            <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'hang_up.wav'">You can now hang up.</audio>
+          </prompt>
+        <elseif cond="process_result == 'Reject'"/>
+          <prompt>
+            <audio fetchhint="prefetch" fetchtimeout="2s" maxage="0" maxstale="0" expr="prompt_path + 'verify_error.wav'">I'm sorry I'm unable to authenticate you. Please contact the help desk.</audio>
+          </prompt>
+        </if>
+      <return/>
+    </block>
+  </form>
+
+</vxml>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<grammar version="1.0" xmlns="http://www.w3.org/2001/06/grammar"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://www.w3.org/2001/06/grammar
+                             http://www.w3.org/TR/speech-grammar/grammar.xsd"
+ xml:lang="en-gb" mode="voice"  tag-format="semantics/1.0" root="nomatch_rule">
+
+  <rule id="nomatch_rule" scope="public">
+    <tag> $.number="" </tag>
+    <item repeat="4">
+      <ruleref uri="#voice_digit" /> <tag> $.number = $.number +$voice_digit.digit</tag>
+    </item>
+  </rule>
+  <rule id="voice_digit">
+    <one-of>
+      <item> zxxx <tag>$.digit="1";</tag></item>
+      <item> xzxzxz <tag>$.digit="2";</tag></item>
+      <item> qqzxx <tag>$.digit="3";</tag></item>
+      <item> xzqzqq <tag>$.digit="4";</tag></item>
+      <item> qttfxx <tag>$.digit="5";</tag></item>
+      <item> tgtgggt <tag>$.digit="6";</tag></item>
+      <item> bgtbgbb <tag>$.digit="7";</tag></item>
+      <item> mmkkiiqtr <tag>$.digit="8";</tag></item>
+      <item> qzx <tag>$.digit="9";</tag></item>
+      <item> popopop <tag>$.digit="0";</tag></item>
+    </one-of>
+  </rule>
+</grammar>

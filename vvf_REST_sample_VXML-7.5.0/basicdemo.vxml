@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<vxml version="2.1" xmlns="http://www.w3.org/2001/vxml" xml:lang="en-US">
+
+
+  <!-- TODO: Credentials information for using VoiceVault Fusion -->
+  <!-- This information can be obtained from
+       https://a8i1.voicevault.net/Registration/ -->
+  <var name="username" expr="'***'"/>
+  <var name="password" expr="'***'"/>
+  <var name="configuration_id" expr="'***'"/>
+  <var name="organisation_id" expr="'***'"/>
+
+  <!-- TODO: external_ref is a unique identifier for this specific telephone call -->
+  <!--       set this to a unique value for this call provided by your IVR -->
+  <var name="external_ref" expr="'session.id'"/>
+  <!-- TODO: format is the audio format that the IVR records utterances as (ALaw, MuLaw, LittleEndian, BigEndian) -->
+  <var name="format" expr="'LittleEndian'"/>
+
+  <form id="do_demo">
+    <subdialog name="result" src="demo_subdialog.vxml">
+      <param name="vv_username" expr="username" />
+      <param name="vv_password" expr="password" />
+      <param name="vv_configuration_id" expr="configuration_id" />
+      <param name="vv_organisation_id" expr="organisation_id" />
+      <param name="vv_external_ref" expr="external_ref" />
+      <param name="vv_format" expr="format" />
+
+      <filled>
+        <goto next="#hang_up"/>
+      </filled>
+    </subdialog>
+  </form>
+  
+  <form id="hang_up">
+    <block>
+      <exit/>
+    </block>
+  </form>
+
+</vxml>
